@@ -1,0 +1,9 @@
+SELECT
+  e.entity_code,
+  e.entity_name,
+  e.entity_email,
+  e.balance_amount
+FROM sample_schema.entity_table e
+WHERE e.active_flag <> 1
+  AND e.balance_amount > 10000
+ORDER BY e.balance_amount DESC;
