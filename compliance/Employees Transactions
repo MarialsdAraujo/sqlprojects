@@ -1,0 +1,84 @@
+WITH filtered_data AS (
+  SELECT
+    a.entity_id,
+    a.record_id,
+    a.record_date,
+    a.amount * -1 AS amount
+  FROM sample_schema.main_table a
+  JOIN sample_schema.entity_table b 
+    ON a.entity_id = b.entity_id
+  WHERE a.record_date BETWEEN DATE '2024-06-01' AND DATE '2025-06-30'
+    AND a.status IN ('STATUS_A', 'STATUS_B')
+    AND a.type IN ('TYPE_X', 'TYPE_Y', 'TYPE_Z', 'TYPE_P', 'TYPE_Q', 'TYPE_R', 'TYPE_S')
+    AND b.flag_active <> 1
+),
+stats AS (
+  SELECT
+    ROUND(AVG(amount), 2) AS avg_amount,
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY amount) AS median_amount
+  FROM filtered_data
+),
+hourly AS (
+  SELECT MAX(rec_count) AS max_count_hour
+  FROM (
+    SELECT entity_id, DATE_TRUNC('hour', record_date) AS hour_slot, COUNT(*) AS rec_count
+    FROM filtered_data
+    GROUP BY 1, 2
+  ) sub
+),
+weekly AS (
+  SELECT MAX(rec_count) AS max_count_week
+  FROM (
+    SELECT entity_id, DATE_TRUNC('week', record_date) AS week_slot, COUNT(*) AS rec_count
+    FROM filtered_data
+    GROUP BY 1, 2
+  ) sub
+),
+monthly AS (
+  SELECT MAX(rec_count) AS max_count_month
+  FROM (
+    SELECT entity_id, DATE_TRUNC('month', record_date) AS month_slot, COUNT(*) AS rec_count
+    FROM filtered_data
+    GROUP BY 1, 2
+  ) sub
+),
+max_value_hourly AS (
+  SELECT MAX(rec_sum) AS max_amount_hour
+  FROM (
+    SELECT entity_id, DATE_TRUNC('hour', record_date) AS hour_slot, SUM(amount) AS rec_sum
+    FROM filtered_data
+    GROUP BY 1, 2
+  ) sub
+),
+max_value_weekly AS (
+  SELECT MAX(rec_sum) AS max_amount_week
+  FROM (
+    SELECT entity_id, DATE_TRUNC('week', record_date) AS week_slot, SUM(amount) AS rec_sum
+    FROM filtered_data
+    GROUP BY 1, 2
+  ) sub
+),
+max_value_monthly AS (
+  SELECT MAX(rec_sum) AS max_amount_month
+  FROM (
+    SELECT entity_id, DATE_TRUNC('month', record_date) AS month_slot, SUM(amount) AS rec_sum
+    FROM filtered_data
+    GROUP BY 1, 2
+  ) sub
+)
+SELECT
+  s.avg_amount,
+  s.median_amount,
+  h.max_count_hour,
+  w.max_count_week,
+  m.max_count_month,
+  hv.max_amount_hour,
+  wv.max_amount_week,
+  mv.max_amount_month
+FROM stats s
+JOIN hourly h ON TRUE
+JOIN weekly w ON TRUE
+JOIN monthly m ON TRUE
+JOIN max_value_hourly hv ON TRUE
+JOIN max_value_weekly wv ON TRUE
+JOIN max_value_monthly mv ON TRUE;
