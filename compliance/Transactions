@@ -1,0 +1,67 @@
+WITH filtered_records AS (
+  SELECT
+    t.entity_id,
+    t.amount * -1 AS amount,
+    t.transaction_date,
+    t.transaction_type
+  FROM sample_schema.main_table t
+  JOIN sample_schema.entity_table e 
+    ON t.entity_id = e.entity_id
+  WHERE t.transaction_date BETWEEN DATE '2024-06-01' AND DATE '2025-06-30'
+    AND t.status IN ('STATUS_A', 'STATUS_B')
+    AND e.active_flag <> 1
+    AND e.account_status = 'STATUS_ACTIVE'
+),
+daily_type_a AS (
+  SELECT
+    entity_id,
+    DATE_TRUNC('day', transaction_date) AS day_slot,
+    SUM(amount) AS total_type_a
+  FROM filtered_records
+  WHERE transaction_type = 'TYPE_A'
+  GROUP BY entity_id, DATE_TRUNC('day', transaction_date)
+),
+daily_type_b AS (
+  SELECT
+    entity_id,
+    DATE_TRUNC('day', transaction_date) AS day_slot,
+    SUM(amount) AS total_type_b
+  FROM filtered_records
+  WHERE transaction_type = 'TYPE_B'
+  GROUP BY entity_id, DATE_TRUNC('day', transaction_date)
+),
+type_a_stats AS (
+  SELECT
+    entity_id,
+    ROUND(AVG(total_type_a), 2) AS avg_type_a_daily,
+    MAX(total_type_a) AS max_type_a_daily,
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY total_type_a) AS median_type_a_daily
+  FROM daily_type_a
+  GROUP BY entity_id
+),
+type_b_stats AS (
+  SELECT
+    entity_id,
+    ROUND(AVG(total_type_b), 2) AS avg_type_b_daily,
+    MAX(total_type_b) AS max_type_b_daily,
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY total_type_b) AS median_type_b_daily
+  FROM daily_type_b
+  GROUP BY entity_id
+)
+SELECT
+  e.entity_code,
+  e.entity_name,
+  e.entity_email,
+  a.avg_type_a_daily,
+  a.median_type_a_daily,
+  a.max_type_a_daily,
+  b.avg_type_b_daily,
+  b.median_type_b_daily,
+  b.max_type_b_daily
+FROM sample_schema.entity_table e
+LEFT JOIN type_a_stats a ON a.entity_id = e.entity_id
+LEFT JOIN type_b_stats b ON b.entity_id = e.entity_id
+WHERE e.active_flag <> 1
+  AND e.account_status = 'STATUS_ACTIVE'
+  AND (a.entity_id IS NOT NULL OR b.entity_id IS NOT NULL)
+ORDER BY e.entity_code;
