@@ -1,0 +1,32 @@
+WITH filtered_records AS (
+  SELECT
+    t.entity_id,
+    t.total_amount,
+    DATE_TRUNC('month', t.date_processed) AS month_period
+  FROM sample_schema.main_table t
+  JOIN sample_schema.entity_table e 
+    ON t.entity_id = e.entity_id
+  WHERE t.record_type = 'TYPE_A'
+    AND t.record_status = 'STATUS_CONFIRMED'
+    AND t.date_processed BETWEEN DATE '2024-06-01' AND DATE '2025-06-30'
+    AND e.active_flag <> 1
+),
+monthly_over_threshold AS (
+  SELECT
+    entity_id,
+    month_period,
+    SUM(total_amount) AS total_sum
+  FROM filtered_records
+  GROUP BY entity_id, month_period
+  HAVING SUM(total_amount) > 10000
+)
+SELECT
+  e.entity_code,
+  e.entity_name,
+  e.entity_email,
+  m.total_sum,
+  m.month_period
+FROM monthly_over_threshold m
+JOIN sample_schema.entity_table e 
+  ON e.entity_id = m.entity_id
+ORDER BY m.month_period, e.entity_code;
